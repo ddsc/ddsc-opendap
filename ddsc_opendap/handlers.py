@@ -1,17 +1,16 @@
 # (c) Nelen & Schuurmans.  MIT licensed, see LICENSE.rst.
 #from __future__ import unicode_literals
 
-from django.conf import settings
-from ddsc_opendap import settings as mysettings # TODO: differentiate envs
-settings.configure(**mysettings.__dict__)
-
 import re
 import numpy as np
 import time
 
 from datetime import datetime
-from pydap.model import SequenceData, SequenceType, DatasetType, BaseType, Float32, Int32
+from django.contrib.auth import authenticate
+from pydap.handlers.helper import constrain
 from pydap.handlers.lib import BaseHandler
+from pydap.model import SequenceData, SequenceType, DatasetType, BaseType, Float32, Int32
+
 from ddsc_core.models import Timeseries
 
 COLNAME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
@@ -19,28 +18,38 @@ COLNAME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
 class CassandraHandler(BaseHandler):
 
-    def __init__(self, dummy):
-        BaseHandler.__init__(self)
-        self.uuid = ''
-
     def parse_constraints(self, environ):
-        uuid = environ.get('pydap.path', '')
-
         # Build the dataset object.
         dataset = DatasetType('timeseries')
+
+        user = None
+        username = environ.get('HTTP_USERNAME', None)
+        password = environ.get('HTTP_PASSWORD', None)
+
+        if username and password:
+            user = authenticate(username=username, password=password)
+        if not user:
+            return dataset
+
+        uuid = environ.get('pydap.path', '')
 
         # Build the sequence object, and insert it in the dataset.
         seq = SequenceType(uuid)
         seq['datetime'] = BaseType(name='datetime', type=Int32)
         seq['value'] = BaseType(name='value', type=Float32)
         seq['flag'] = BaseType(name='flag', type=Int32)
-        seq.data = CassandraData(uuid, ['datetime', 'value', 'flag'])
+        
+        try:
+            seq.data = CassandraData(uuid, ['datetime', 'value', 'flag'])
+        except Timeseries.DoesNotExist:
+            return dataset
 
         dataset[seq.name] = seq
 
         query = environ.get('QUERY_STRING', '')
+        print dataset
 
-#        return seq
+        return constrain(dataset, environ.get('QUERY_STRING', ''))
         return dataset
 
 
@@ -61,10 +70,7 @@ class CassandraData(object):
 
     def __iter__(self):
         print "__iter__"
-        start = datetime.strptime('2009-01-01T23:00:00Z', COLNAME_FORMAT)
-        end = datetime.strptime('2009-01-11T23:00:00Z', COLNAME_FORMAT)
-
-        df = self.ts.get_events(start=start, end=end, filter=self.selection)
+        df = self.ts.get_events(start=None, end=None, filter=self.selection)
         for dt, row in df.iterrows():
             yield (377+1000*long(time.mktime(dt.timetuple())), row['value'], row['flag'])
 
@@ -107,9 +113,4 @@ class CassandraData(object):
     def __lt__(self, other): return ConstraintExpression('%s<%s' % (self.id, encode(other)))
 
 
-if __name__ == '__main__':
-    import sys
-    from paste.httpserver import serve
-
-    application = CassandraHandler('')
-    serve(application, host='0.0.0.0', port=8001)
+application = CassandraHandler()
