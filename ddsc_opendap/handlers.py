@@ -9,15 +9,25 @@ from datetime import datetime
 from django.contrib.auth import authenticate
 from pydap.handlers.helper import constrain
 from pydap.handlers.lib import BaseHandler
-from pydap.model import SequenceData, SequenceType, DatasetType, BaseType, Float32, Int32
+from pydap.model import StructureType, SequenceType, DatasetType, BaseType
+from pydap.model import SequenceData, Float32, Int32
+from urllib import unquote
 
 from ddsc_core.models import Timeseries
 
 COLNAME_FORMAT = '%Y-%m-%dT%H:%M:%SZ'
 
 
-class CassandraHandler(BaseHandler):
+class RootHandler(BaseHandler):
+    def __call__(self, environ, start_response):
+        try:
+            return EventHandler().__call__(environ, start_response)
+        except Exception as ex:
+            return "Permission denied"
 
+
+class EventHandler(BaseHandler):
+    
     def parse_constraints(self, environ):
         # Build the dataset object.
         dataset = DatasetType('timeseries')
@@ -35,82 +45,40 @@ class CassandraHandler(BaseHandler):
 
         # Build the sequence object, and insert it in the dataset.
         seq = SequenceType(uuid)
-        seq['datetime'] = BaseType(name='datetime', type=Int32)
+        seq['datetime'] = BaseType(name='datetime', type=Float32)
         seq['value'] = BaseType(name='value', type=Float32)
         seq['flag'] = BaseType(name='flag', type=Int32)
         
         try:
-            seq.data = CassandraData(uuid, ['datetime', 'value', 'flag'])
+            seq.data = EventData(uuid, ['datetime', 'value', 'flag'])
         except Timeseries.DoesNotExist:
             return dataset
 
         dataset[seq.name] = seq
 
-        query = environ.get('QUERY_STRING', '')
-        print dataset
-
         return constrain(dataset, environ.get('QUERY_STRING', ''))
-        return dataset
 
 
-class CassandraData(object):
-    shape = ()
+class EventData(object):
 
     def __init__(self, uuid, cols, selection=None, slice_=None):
         self.ts = Timeseries.objects.get(uuid=uuid)
         self.cols = cols
         self.selection = selection or []
         self.slice = slice_ or (slice(None),)
+        self.df = self.ts.get_events(start=None, end=None, filter=self.selection)
 
     @property
     def dtype(self):
-        print "dtype"
         peek = iter(self).next()
         return np.array(peek).dtype
 
     def __iter__(self):
-        print "__iter__"
-        df = self.ts.get_events(start=None, end=None, filter=self.selection)
-        for dt, row in df.iterrows():
-            yield (377+1000*long(time.mktime(dt.timetuple())), row['value'], row['flag'])
+        for dt, row in self.df.iterrows():
+            yield (dt.strftime('%s.%f'), row['value'], row['flag'])
 
-    def __getitem__(self, key):
-        print "__getitem__ %s" % key
-        out = self.clone()
-
-        # return the data for a children
-        if isinstance(key, basestring):
-            out.id = '{id}.{child}'.format(id=self.uuid, child=key)
-            out.cols = key
-
-        # return a new object with requested columns
-        elif isinstance(key, list):
-            out.cols = tuple(key)
-
-        # return a copy with the added constraints
-        elif isinstance(key, ConstraintExpression):
-            out.selection.extend( str(key).split('&') )
-
-        # slice data
-        else:
-            if isinstance(key, int):
-                key = slice(key, key+1)
-            out.slice = combine_slices(self.slice, (key,))
-
-        print out
-        return out
-
-    def clone(self):
-        print "clone %s" % self
-        return self.__class__(self.uuid, self.cols[:], self.selection[:],
-                              self.slice[:])
-
-    def __eq__(self, other): return ConstraintExpression('%s=%s' % (self.id, encode(other)))
-    def __ne__(self, other): return ConstraintExpression('%s!=%s' % (self.id, encode(other)))
-    def __ge__(self, other): return ConstraintExpression('%s>=%s' % (self.id, encode(other)))
-    def __le__(self, other): return ConstraintExpression('%s<=%s' % (self.id, encode(other)))
-    def __gt__(self, other): return ConstraintExpression('%s>%s' % (self.id, encode(other)))
-    def __lt__(self, other): return ConstraintExpression('%s<%s' % (self.id, encode(other)))
+    def __len__(self):
+        return len(self.df)
 
 
-application = CassandraHandler()
+application = RootHandler()
