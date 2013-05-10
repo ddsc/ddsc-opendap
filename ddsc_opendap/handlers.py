@@ -50,7 +50,8 @@ class EventHandler(BaseHandler):
         if not user:
             return dataset
 
-        uuid = environ.get('pydap.path', '')
+        path = environ.get('pydap.path', '').split('/')
+        uuid = path[-1]
 
         # Build the sequence object, and insert it in the dataset.
         seq = SequenceType(uuid)
