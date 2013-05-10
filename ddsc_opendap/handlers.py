@@ -1,6 +1,15 @@
 # (c) Nelen & Schuurmans.  MIT licensed, see LICENSE.rst.
 #from __future__ import unicode_literals
 
+import pydap.responses.html
+from pydap.util.template import GenshiRenderer, StringLoader
+
+DEFAULT_TEMPLATE = pydap.responses.html.DEFAULT_TEMPLATE \
+    .replace("&copy; Roberto De Almeida", "") \
+    .replace("<em><a href=\"http://pydap.org/\">pydap/$version</a></em>", "")
+pydap.responses.html.HTMLResponse.renderer = GenshiRenderer(
+    options={}, loader=StringLoader( {'html.html': DEFAULT_TEMPLATE} ))
+
 import re
 import numpy as np
 import time
