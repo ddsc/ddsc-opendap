@@ -10,12 +10,15 @@ DEFAULT_TEMPLATE = pydap.responses.html.DEFAULT_TEMPLATE \
 pydap.responses.html.HTMLResponse.renderer = GenshiRenderer(
     options={}, loader=StringLoader( {'html.html': DEFAULT_TEMPLATE} ))
 
+import Cookie
 import re
 import numpy as np
 import time
 
 from datetime import datetime
 from django.contrib.auth import authenticate
+from django.contrib.auth.models import User
+from django.contrib.sessions.models import Session
 from pydap.handlers.helper import constrain
 from pydap.handlers.lib import BaseHandler
 from pydap.model import StructureType, SequenceType, DatasetType, BaseType
@@ -47,6 +50,23 @@ class EventHandler(BaseHandler):
 
         if username and password:
             user = authenticate(username=username, password=password)
+
+        if not user:
+            cookie_string = environ.get('HTTP_COOKIE', None)
+            if cookie_string:
+                cookie = Cookie.SimpleCookie()
+                cookie.load(cookie_string)
+                if 'sessionid' in cookie:
+                    sessionid = cookie['sessionid'].value
+                    try:
+                        session = Session.objects.get(pk=sessionid)
+                        session_data = session.get_decoded()
+                        if '_auth_user_id' in session_data:
+                            userid = session_data['_auth_user_id']
+                            user = User.objects.get(pk=userid)
+                    except Session.DoesNotExist, User.DoesNotExist:
+                        pass
+
         if not user:
             return dataset
 
