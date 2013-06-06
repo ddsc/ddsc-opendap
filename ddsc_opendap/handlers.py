@@ -45,12 +45,14 @@ class EventHandler(BaseHandler):
         dataset = DatasetType('timeseries')
 
         user = None
+
+        # Authentication by http headers.
         username = environ.get('HTTP_USERNAME', None)
         password = environ.get('HTTP_PASSWORD', None)
-
         if username and password:
             user = authenticate(username=username, password=password)
 
+        # Authentication by django session.
         if not user:
             cookie_string = environ.get('HTTP_COOKIE', None)
             if cookie_string:
@@ -67,6 +69,7 @@ class EventHandler(BaseHandler):
                     except Session.DoesNotExist, User.DoesNotExist:
                         pass
 
+        # No auth, no data. OpenDAP spec does not describe error handling.
         if not user:
             return dataset
 
