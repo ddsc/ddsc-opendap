@@ -7,7 +7,7 @@ Usage
 
 DDSC timeseries are accessable through the OpenDAP protocol at:
 
-http://api.dijkdata.nl/opendap/<UUID>.<EXT>
+https://api.ddsc.nl/opendap/<UUID>.<EXT>
 
 <UUID> The unique identifier of a timeseries.
 <EXT>  Format to receive the data in. Valid options:
@@ -18,12 +18,12 @@ http://api.dijkdata.nl/opendap/<UUID>.<EXT>
 
 Example:
 
-http://api.dijkdata.nl/opendap/aaa33d42-ad50-4d52-aae3-63b93446dab4.nc
+https://api.ddsc.nl/opendap/aaa33d42-ad50-4d52-aae3-63b93446dab4.nc
 
 For convenience, each Timeseries' details in the REST API at
-http://api.dijkdata.nl/api/v*/timeseries/<UUID>
+https://api.ddsc.nl/api/v*/timeseries/<UUID>
 includes a hyperlink to that Timeseries' OpenDAP equivalent at
-http://api.dijkdata.nl/opendap/<UUID>.html
+https://api.ddsc.nl/opendap/<UUID>.html
 
 The DDSC OpenDAP server supports authentication by http headers. Requests
 should include header fields 'Username' and 'Password' with the appropriate
